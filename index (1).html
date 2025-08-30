@@ -85,19 +85,19 @@
 
     function draw() {
       const expr = document.getElementById("functionInput").value;
-      if (!expr) return alert("함수를 입력하세요!");
+      if (!expr) {
+        alert("함수를 입력하세요!");
+        return;
+      }
 
       const xValues = Array.from({length: 200}, (_, i) => -10 + i * 0.1);
       let yValues;
       try {
-        const scope = { x: 0 };
         const compiled = math.compile(expr);
-        yValues = xValues.map(x => {
-          scope.x = x;
-          return compiled.evaluate(scope);
-        });
+        yValues = xValues.map(x => compiled.evaluate({x}));
       } catch (err) {
-        return alert("함수 해석 오류: " + err.message);
+        alert("함수 해석 오류: " + err.message);
+        return;
       }
 
       const trace = { 
@@ -105,7 +105,7 @@
         y: yValues, 
         mode: "lines", 
         type: "scatter",
-        name: expr,  // 범례에 함수식 표시
+        name: expr,  
         line: { color: getRandomColor(), dash: getRandomDash(), width: 2 }
       };
 
