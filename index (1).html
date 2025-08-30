@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="ko" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>함수 그래프 그리기 · Single-file</title>
+  <meta name="description" content="수학 함수식을 입력하면 그래프를 그려주는 단일 파일 웹페이지" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Ctext y='0.9em' font-size='200'%3Eƒ%3C/text%3E%3C/svg%3E">
+
+  <!-- Tailwind (Play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ["Inter", "Pretendard", "ui-sans-serif", "system-ui", "Apple SD Gothic Neo", "Segoe UI", "Noto Sans KR", "Roboto", "Helvetica Neue", "Arial", "\uB098\uB214 Gothic", "sans-serif"] }
+        }
+      }
+    }
+  </script>
+
+  <!-- Plotly (latest) -->
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <!-- math.js (browser build) -->
+  <script src="https://cdn.jsdelivr.net/npm/mathjs@11.11.0/lib/browser/math.js"></script>
+
+  <style>
+    :root { color-scheme: light dark; }
+    *:focus-visible { outline: 2px solid rgba(59,130,246,0.7); outline-offset: 2px; border-radius: 0.6rem; }
+  </style>
+</head>
+<body class="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 antialiased">
+  <div class="max-w-6xl mx-auto p-4 sm:p-6">
+    <header class="flex items-center justify-between gap-3 mb-4">
+      <h1 class="text-2xl sm:text-3xl font-bold tracking-tight">함수 그래프 그리기</h1>
+      <div class="flex items-center gap-2">
+        <button id="themeBtn" class="px-3 py-2 rounded-2xl bg-zinc-200/70 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-sm">다크/라이트</button>
+        <a href="#help" class="px-3 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm">도움말</a>
+      </div>
+    </header>
+
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
+      <div class="lg:col-span-1 space-y-4">
+        <div class="rounded-2xl bg-white dark:bg-zinc-800/70 shadow p-4">
+          <label for="fnInput" class="block text-sm font-semibold mb-2">함수식 입력</label>
+          <textarea id="fnInput" class="w-full h-28 p-3 rounded-xl bg-zinc-100 dark:bg-zinc-900/50" placeholder="예: sin(x)\nx^2\nlog(x)" spellcheck="false"></textarea>
+          <div id="errorBox" class="hidden mt-2 text-sm text-red-600"></div>
+
+          <!-- 수학 키보드 -->
+          <div class="mt-3 grid grid-cols-6 gap-2 text-sm">
+            <button class="kbd">7</button>
+            <button class="kbd">8</button>
+            <button class="kbd">9</button>
+            <button class="kbd">sin(</button>
+            <button class="kbd">cos(</button>
+            <button class="kbd">tan(</button>
+
+            <button class="kbd">4</button>
+            <button class="kbd">5</button>
+            <button class="kbd">6</button>
+            <button class="kbd">log(</button>
+            <button class="kbd">sqrt(</button>
+            <button class="kbd">abs(</button>
+
+            <button class="kbd">1</button>
+            <button class="kbd">2</button>
+            <button class="kbd">3</button>
+            <button class="kbd">^</button>
+            <button class="kbd">(</button>
+            <button class="kbd">)</button>
+
+            <button class="kbd">0</button>
+            <button class="kbd">.</button>
+            <button class="kbd">x</button>
+            <button class="kbd">pi</button>
+            <button class="kbd">e</button>
+            <button id="clearInput" class="bg-red-500 text-white">지우기</button>
+          </div>
+        </div>
+
+        <div class="rounded-2xl bg-white dark:bg-zinc-800/70 shadow p-4 space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <label class="text-sm">
+              <span class="block mb-1 font-medium">x 최소값</span>
+              <input id="xmin" type="number" step="any" value="-10" class="w-full p-2 rounded-xl bg-zinc-100 dark:bg-zinc-900/50" />
+            </label>
+            <label class="text-sm">
+              <span class="block mb-1 font-medium">x 최대값</span>
+              <input id="xmax" type="number" step="any" value="10" class="w-full p-2 rounded-xl bg-zinc-100 dark:bg-zinc-900/50" />
+            </label>
+          </div>
+          <label class="text-sm block">
+            <span class="block mb-1 font-medium">샘플 개수 <span id="samplesVal" class="opacity-70"></span></span>
+            <input id="samples" type="range" min="200" max="5000" value="1200" class="w-full" />
+          </label>
+          <div class="flex gap-2">
+            <button id="plotBtn" class="flex-1 px-4 py-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold">그리기 (Ctrl/⌘+Enter)</button>
+            <button id="resetBtn" class="px-4 py-2 rounded-2xl bg-zinc-200 dark:bg-zinc-700">리셋</button>
+          </div>
+        </div>
+
+        <div id="help" class="rounded-2xl bg-white dark:bg-zinc-800/70 shadow p-4 text-sm leading-6">
+          <details>
+            <summary class="cursor-pointer font-semibold">사용 팁 / 수식 문법</summary>
+            <ul class="list-disc pl-5 mt-2 space-y-1">
+              <li><code>x</code>를 변수로 사용합니다.</li>
+              <li><code>^</code> = 거듭제곱, <code>sqrt(x)</code> = 제곱근</li>
+              <li><code>log(x)</code> = 자연로그, <code>log10(x)</code> = 상용로그</li>
+              <li><code>abs(x)</code> = 절댓값</li>
+              <li><code>pi</code>, <code>e</code> 같은 상수 사용 가능</li>
+            </ul>
+          </details>
+        </div>
+      </div>
+
+      <div class="lg:col-span-2">
+        <div class="rounded-2xl bg-white dark:bg-zinc-800/70 shadow p-2 sm:p-3 h-[70vh] min-h-[420px]">
+          <div id="plot" class="w-full h-full rounded-xl"></div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="mt-6 text-xs opacity-70">
+      Made with Plotly + math.js · 단일 <code>index.html</code> 파일
+    </footer>
+  </div>
+
+  <script>
+    // --- Theme toggle ---
+    const html = document.documentElement;
+    const themeBtn = document.getElementById('themeBtn');
+    const THEME_KEY = 'fnplot-theme';
+    function applyTheme(t){ if(t==='light'){ html.classList.remove('dark'); } else { html.classList.add('dark'); } }
+    applyTheme(localStorage.getItem(THEME_KEY) || 'dark');
+    themeBtn.addEventListener('click', ()=>{
+      const next = html.classList.contains('dark') ? 'light' : 'dark';
+      localStorage.setItem(THEME_KEY, next); applyTheme(next);
+    });
+
+    // --- Elements ---
+    const fnInput = document.getElementById('fnInput');
+    const xminEl = document.getElementById('xmin');
+    const xmaxEl = document.getElementById('xmax');
+    const samplesEl = document.getElementById('samples');
+    const samplesVal = document.getElementById('samplesVal');
+    const plotBtn = document.getElementById('plotBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const errorBox = document.getElementById('errorBox');
+
+    // 키보드 버튼
+    document.querySelectorAll('.kbd').forEach(btn => {
+      btn.addEventListener('click', () => {
+        fnInput.value += btn.textContent;
+        fnInput.focus();
+      });
+    });
+    document.getElementById('clearInput').addEventListener('click', ()=>{
+      fnInput.value = '';
+    });
+
+    // show samples value
+    function updateSamplesLabel(){ samplesVal.textContent = `(${samplesEl.value})`; }
+    samplesEl.addEventListener('input', updateSamplesLabel); updateSamplesLabel();
+
+    // helpers
+    const isFiniteNumber = (v)=> typeof v === 'number' && isFinite(v);
+
+    function splitFunctions(text){
+      return text.split(/\n|;|,/).map(s=>s.trim()).filter(Boolean);
+    }
+
+    function compileFunctions(list){
+      const compiled = [];
+      const errors = [];
+      for (const expr of list) {
+        try {
+          const node = math.parse(expr);
+          const code = node.compile();
+          compiled.push({ expr, code });
+        } catch (e) {
+          errors.push(`식 오류: ${expr} — ${e.message}`);
+        }
+      }
+      return { compiled, errors };
+    }
+
+    function evaluatePoints(code, xmin, xmax, n){
+      const xs = new Array(n);
+      const ys = new Array(n);
+      const step = (xmax - xmin) / (n - 1);
+      for (let i = 0; i < n; i++) {
+        const x = xmin + i * step;
+        let y = null;
+        try {
+          const val = code.evaluate({ x, e: Math.E, pi: Math.PI });
+          y = isFiniteNumber(val) ? val : null;
+        } catch (_) {
+          y = null;
+        }
+        xs[i] = x;
+        ys[i] = y;
+      }
+      return { xs, ys };
+    }
+
+    function draw(){
+      const text = fnInput.value.trim();
+      const xmin = parseFloat(xminEl.value);
+      const xmax = parseFloat(xmaxEl.value);
+      const n = parseInt(samplesEl.value, 10);
+
+      errorBox.classList.add('hidden');
+      errorBox.textContent = '';
+
+      if (!text) { Plotly.purge('plot'); return; }
+      if (!(isFiniteNumber(xmin) && isFiniteNumber(xmax) && xmax > xmin)) {
+        errorBox.textContent = 'x 최소/최대값을 올바르게 입력하세요.';
+        errorBox.classList.remove('hidden');
+        return;
+      }
+
+      const list = splitFunctions(text);
+      const { compiled, errors } = compileFunctions(list);
+      if (errors.length) {
+        errorBox.innerHTML = errors.map(e=>`<div>• ${e}</div>`).join('');
+        errorBox.classList.remove('hidden');
+      }
+      if (!compiled.length) { Plotly.purge('plot'); return; }
+
+      const traces = compiled.map(({expr, code}) => {
+        const { xs, ys } = evaluatePoints(code, xmin, xmax, n);
+        return { x: xs, y: ys, mode: 'lines', type: 'scatter', name: expr };
+      });
+
+      const layout = {
+        margin: { l: 48, r: 24, t: 14, b: 42 },
+        hovermode: 'x unified',
+        xaxis: { zeroline: true, showgrid: true, gridcolor: 'rgba(127,127,127,0.2)' },
+        yaxis: { zeroline: true, showgrid: true, gridcolor: 'rgba(127,127,127,0.2)' },
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)'
+      };
+
+      Plotly.newPlot('plot', traces, layout, {responsive: true, displaylogo: false});
+    }
+
+    plotBtn.addEventListener('click', draw);
+    resetBtn.addEventListener('click', () => {
+      fnInput.value = '';
+      xminEl.value = -10; xmaxEl.value = 10; samplesEl.value = 1200; updateSamplesLabel();
+      errorBox.classList.add('hidden'); errorBox.textContent = '';
+      Plotly.purge('plot');
+    });
+
+    window.addEventListener('keydown', (e)=>{
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { draw(); }
+    });
+  </script>
+
+  <style>
+    .kbd { @apply px-2 py-1 rounded-lg bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600; }
+  </style>
+</body>
+</html>
